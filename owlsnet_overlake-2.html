@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OwlsNet</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500;600&display=swap');
+
+    :root {
+      --brand: #1B4D3E;
+      --brand-light: #2E7D5A;
+      --brand-fade: #E8F4EF;
+      --accent: #D4A017;
+      --surface: #ffffff;
+      --surface2: #f7f7f6;
+      --border: #d8d8d8;
+      --text: #262626;
+      --text2: #5b6270;
+      --r: 16px;
+      --radius-lg: 20px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      min-height: 100%;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      color: var(--text);
+      background: #f3f7f5;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    nav {
+      background: var(--brand);
+      padding: 0 1.5rem;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+
+    .nav-logo svg {
+      width: 28px;
+      height: 28px;
+    }
+
+    .nav-logo span {
+      font-family: 'Playfair Display', serif;
+      color: #fff;
+      font-size: 20px;
+      letter-spacing: 0.5px;
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .nav-tag {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      color: rgba(255, 255, 255, 0.65);
+      text-transform: uppercase;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .btn-admin,
+    .btn-post,
+    .btn-submit,
+    .btn-cancel,
+    .btn-danger {
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      transition: background 0.15s ease;
+    }
+
+    .btn-admin,
+    .btn-post {
+      background: var(--accent);
+      color: #1a1a1a;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .btn-admin:hover,
+    .btn-post:hover,
+    .btn-submit:hover {
+      background: var(--brand-light);
+    }
+
+    .btn-cancel {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text2);
+      padding: 8px 16px;
+      font-weight: 500;
+    }
+
+    .btn-submit {
+      background: var(--brand);
+      color: #fff;
+      padding: 8px 18px;
+      font-weight: 600;
+    }
+
+    .btn-danger {
+      background: #c0392b;
+      color: #fff;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 1.5rem 1rem;
+      gap: 1.5rem;
+    }
+
+    .feed {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .sidebar {
+      width: 260px;
+      flex-shrink: 0;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .sidebar-card h3,
+    .sidebar-card p {
+      margin-bottom: 0.75rem;
+    }
+
+    .sidebar-card h3 {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text2);
+    }
+
+    .nest-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: var(--r);
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .nest-item:hover,
+    .nest-item.active {
+      background: var(--surface2);
+    }
+
+    .nest-dot {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .nest-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .nest-count {
+      font-size: 11px;
+      color: var(--text2);
+    }
+
+    .school-badge {
+      background: var(--brand);
+      color: #fff;
+      padding: 12px;
+      border-radius: var(--r);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+
+    .school-badge strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .feed-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .feed-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 22px;
+      color: var(--brand);
+    }
+
+    .post-card,
+    .post-detail-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+      transition: border-color 0.15s ease;
+    }
+
+    .post-card:hover {
+      border-color: var(--brand-light);
+    }
+
+    .post-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .nest-pill {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .post-time,
+    .anon-tag {
+      font-size: 12px;
+      color: var(--text2);
+    }
+
+    .post-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+      line-height: 1.4;
+    }
+
+    .post-body,
+    .post-detail-body,
+    .comment-text {
+      font-size: 14px;
+      color: var(--text2);
+      line-height: 1.7;
+    }
+
+    .post-detail-body,
+    .comment-text {
+      color: var(--text);
+    }
+
+    .post-footer,
+    .modal-footer,
+    .vote-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .vote-btn,
+    .comment-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--text2);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s ease;
+    }
+
+    .vote-btn:hover,
+    .comment-btn:hover {
+      background: var(--surface2);
+    }
+
+    .vote-btn.active {
+      color: #1B9E4A;
+      background: #e8f7ee;
+    }
+
+    .vote-btn.down.active {
+      color: #c0392b;
+      background: #fceaea;
+    }
+
+    .vote-count {
+      font-size: 13px;
+      font-weight: 600;
+      min-width: 24px;
+      text-align: center;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.42);
+      z-index: 200;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .overlay.visible {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 520px;
+      padding: 1.5rem;
+      border: 1px solid var(--border);
+    }
+
+    .modal h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 20px;
+      color: var(--brand);
+      margin-bottom: 1rem;
+    }
+
+    .modal label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text2);
+      margin-bottom: 6px;
+    }
+
+    .modal input,
+    .modal textarea,
+    .modal select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 11px 12px;
+      font-size: 14px;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      margin-bottom: 14px;
+      outline: none;
+    }
+
+    .modal input:focus,
+    .modal textarea:focus,
+    .modal select:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 4px rgba(27, 77, 62, 0.12);
+    }
+
+    .modal textarea {
+      resize: vertical;
+      min-height: 90px;
+    }
+
+    .back-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--brand);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 1rem;
+      font-weight: 500;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 1rem 0;
+    }
+
+    .comment-box {
+      margin-bottom: 1rem;
+    }
+
+    .comment-box input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 12px;
+      font-size: 14px;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      outline: none;
+    }
+
+    .comment-box input:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 4px rgba(27, 77, 62, 0.12);
+    }
+
+    .comment-submit {
+      margin-top: 8px;
+      background: var(--brand);
+      color: #fff;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .comment {
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .comment:last-child {
+      border-bottom: none;
+    }
+
+    .comment-author {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--brand);
+      margin-bottom: 4px;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--text2);
+    }
+
+    .empty-icon {
+      font-size: 42px;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .pin-row input {
+      width: 100%;
+      letter-spacing: 4px;
+      font-size: 18px;
+      text-align: center;
+    }
+
+    .anon-tag {
+      font-style: italic;
+    }
+
+    @media (max-width: 900px) {
+      .main {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <nav>
+      <div class="nav-logo" onclick="goHome()">
+        <svg viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <circle cx="14" cy="14" r="14" fill="rgba(255,255,255,0.15)" />
+          <text x="14" y="19" text-anchor="middle" font-size="16" fill="white">🦉</text>
+        </svg>
+        <span>OwlsNet</span>
+      </div>
+      <div class="nav-right">
+        <span class="nav-tag">Overlake School</span>
+        <button class="btn-admin" onclick="showAdminUnlock()" id="adminBtn">Admin</button>
+      </div>
+    </nav>
+
+    <main class="main">
+      <section class="feed" id="feed"></section>
+      <aside class="sidebar" id="sidebar"></aside>
+    </main>
+
+    <div class="overlay" id="overlay">
+      <div class="modal" id="modal-content"></div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'owlsnet_state';
+    const STATE_SECRET = 'OwlsNetSecure2026';
+    const STATE_SALT = 'owlsnet-storage-salt';
+    const ADMIN_HASH = '9c0b9a83552942c0309f561bdf5f94bf24b2bae0b452eb4dd9bc5b0fd7ea9e61';
+
+    const NEST_COLORS = [
+      { bg: '#d4edda', txt: '#155724' },
+      { bg: '#d1ecf1', txt: '#0c5460' },
+      { bg: '#fff3cd', txt: '#856404' },
+      { bg: '#f8d7da', txt: '#721c24' },
+      { bg: '#e2d9f3', txt: '#4a235a' },
+      { bg: '#fde8d8', txt: '#7d3c00' },
+      { bg: '#d6eaff', txt: '#1a4a7a' },
+      { bg: '#e8f8e8', txt: '#1a5c1a' }
+    ];
+
+    const INITIAL_NESTS = [
+      { id: 'nest_1', name: 'Announcements', desc: 'Official school news', color: 0, emoji: '📣' },
+      { id: 'nest_2', name: 'Sports', desc: 'Athletics and games', color: 1, emoji: '🏆' },
+      { id: 'nest_3', name: 'Academics', desc: 'Classes and study groups', color: 2, emoji: '📚' },
+      { id: 'nest_4', name: 'Events', desc: 'Clubs and activities', color: 3, emoji: '🎉' },
+      { id: 'nest_5', name: 'Unrelated', desc: 'Anything and everything', color: 4, emoji: '🌀' }
+    ];
+
+    const storageApi = window.storage ?? {
+      async get(key) { return { value: localStorage.getItem(key) }; },
+      async set(key, value) { localStorage.setItem(key, value); }
+    };
+
+    async function deriveKey(secret, salt) {
+      const encoder = new TextEncoder();
+      const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(secret),
+        'PBKDF2',
+        false,
+        ['deriveKey']
+      );
+      return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: encoder.encode(salt), iterations: 250000, hash: 'SHA-256' },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        true,
+        ['encrypt', 'decrypt']
+      );
+    }
+
+    function bufToBase64(buffer) {
+      let binary = '';
+      const bytes = new Uint8Array(buffer);
+      const chunkSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+      }
+      return btoa(binary);
+    }
+
+    function base64ToBuf(base64) {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes;
+    }
+
+    async function encryptState(plaintext) {
+      const key = await deriveKey(STATE_SECRET, STATE_SALT);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const encoded = new TextEncoder().encode(plaintext);
+      const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+      return `${bufToBase64(iv)}.${bufToBase64(cipher)}`;
+    }
+
+    async function decryptState(payload) {
+      const [ivBase64, cipherBase64] = payload.split('.');
+      if (!ivBase64 || !cipherBase64) {
+        throw new Error('Invalid encrypted payload');
+      }
+      const key = await deriveKey(STATE_SECRET, STATE_SALT);
+      const iv = base64ToBuf(ivBase64);
+      const cipher = base64ToBuf(cipherBase64);
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher);
+      return new TextDecoder().decode(plain);
+    }
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    async function sha256(text) {
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+      return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    const state = {
+      selectedNest: null,
+      selectedPost: null,
+      isAdmin: false,
+      nests: [],
+      posts: [],
+      comments: [],
+      nextPostId: 1,
+      nextCommentId: 1
+    };
+
+    const overlay = document.getElementById('overlay');
+    const modal = document.getElementById('modal-content');
+
+    overlay.addEventListener('click', closeModal);
+    modal.addEventListener('click', event => event.stopPropagation());
+
+    async function load() {
+      try {
+        const response = await storageApi.get(STORAGE_KEY);
+        const rawValue = typeof response === 'string' ? response : response?.value;
+        if (rawValue) {
+          let raw = rawValue;
+          try {
+            raw = await decryptState(rawValue);
+          } catch {
+            // If the stored state is not encrypted yet, fall back to plain JSON.
+          }
+          const saved = JSON.parse(raw);
+          Object.assign(state, {
+            ...state,
+            ...saved,
+            isAdmin: false,
+            selectedPost: null
+          });
+        }
+      } catch (error) {
+        console.warn('Unable to load saved state', error);
+      }
+
+      if (state.nests.length === 0) {
+        state.nests = [...INITIAL_NESTS];
+        state.posts = [];
+        state.nextPostId = 1;
+        await save();
+      } else if (!state.nests.some(nest => nest.id === 'nest_5')) {
+        state.nests.push(INITIAL_NESTS[4]);
+        await save();
+      }
+
+      render();
+    }
+
+    async function save() {
+      try {
+        const payload = JSON.stringify({
+          nests: state.nests,
+          posts: state.posts,
+          comments: state.comments,
+          nextPostId: state.nextPostId,
+          nextCommentId: state.nextCommentId
+        });
+        const encrypted = await encryptState(payload);
+        await storageApi.set(STORAGE_KEY, encrypted);
+      } catch (error) {
+        console.warn('Unable to save state', error);
+      }
+    }
+
+    function getNestColor(nest) {
+      return NEST_COLORS[nest.color % NEST_COLORS.length];
+    }
+
+    const BAD_WORDS = [
+      'fuck',
+      'shit',
+      'damn',
+      'bitch',
+      'asshole',
+      'bastard',
+      'crap',
+      'hell',
+      'darn',
+      'idiot',
+      'stupid',
+      'nigger'
+    ];
+
+    function censorWord(match) {
+      return '*'.repeat(match.length);
+    }
+
+    function sanitizeText(text) {
+      if (!text) return '';
+      const pattern = new RegExp(`\\b(${BAD_WORDS.join('|')})\\b`, 'gi');
+      return text.replace(pattern, censorWord);
+    }
+
+    function timeAgo(timestamp) {
+      const seconds = (Date.now() - timestamp) / 1000;
+      if (seconds < 60) return 'just now';
+      if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+      if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+      return `${Math.floor(seconds / 86400)}d ago`;
+    }
+
+    function render() {
+      renderSidebar();
+      state.selectedPost ? renderPostDetail() : renderFeed();
+    }
+
+    function renderSidebar() {
+      const selectedNest = state.selectedNest;
+      const allCount = state.posts.length;
+      const items = state.nests.map(nest => {
+        const count = state.posts.filter(post => post.nestId === nest.id).length;
+        const color = getNestColor(nest);
+        const active = selectedNest === nest.id ? 'active' : '';
+
+        return `
+          <div class="nest-item ${active}" onclick="selectNest('${nest.id}')">
+            <div class="nest-dot" style="background:${color.bg};color:${color.txt}">${nest.emoji}</div>
+            <div>
+              <div class="nest-name">${escapeHtml(nest.name)}</div>
+              <div class="nest-count">${count} post${count !== 1 ? 's' : ''}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('sidebar').innerHTML = `
+        <div class="card sidebar-card">
+          <h3>Nests</h3>
+          <div class="nest-item ${selectedNest === null ? 'active' : ''}" onclick="selectNest(null)">
+            <div class="nest-dot" style="background:#e8f4ef;color:#1B4D3E">🏠</div>
+            <div>
+              <div class="nest-name">All Posts</div>
+              <div class="nest-count">${allCount} post${allCount !== 1 ? 's' : ''}</div>
+            </div>
+          </div>
+          ${items}
+          ${state.isAdmin ? `
+            <div style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);">
+              <button class="btn-post" style="width:100%; justify-content:center;" onclick="showCreateNest()">➕ New Nest</button>
+            </div>
+          ` : ''}
+        </div>
+
+        <div class="card sidebar-card">
+          <div class="school-badge">
+            <strong>🦉 The Overlake School</strong>
+            All posts are anonymous.
+          </div>
+        </div>
+
+        ${state.isAdmin ? `
+          <div class="card sidebar-card" style="border-color: var(--accent);">
+            <h3 style="color: var(--accent);">Admin mode active</h3>
+            <p>Manage nests, posts, and delete content.</p>
+            <button class="btn-cancel" style="width: 100%;" onclick="logout()">Log out</button>
+          </div>
+        ` : ''}
+      `;
+    }
+
+    function renderFeed() {
+      const feed = document.getElementById('feed');
+      const filteredPosts = state.selectedNest
+        ? state.posts.filter(post => post.nestId === state.selectedNest)
+        : state.posts;
+
+      const sortedPosts = [...filteredPosts].sort((a, b) => b.votes - a.votes);
+      const nest = state.nests.find(nest => nest.id === state.selectedNest);
+      const title = nest ? `${nest.emoji} ${escapeHtml(nest.name)}` : '🦉 All Posts';
+
+      feed.innerHTML = `
+        <div class="feed-header">
+          <span class="feed-title">${title}</span>
+          <button class="btn-post" onclick="showCreatePost()">📝 Post</button>
+        </div>
+        ${sortedPosts.length === 0 ? `
+          <div class="empty">
+            <span class="empty-icon">🪶</span>
+            No posts yet. Be the first!
+          </div>
+        ` : sortedPosts.map(renderPostCard).join('')}
+      `;
+    }
+
+    function renderPostCard(post) {
+      const nest = state.nests.find(item => item.id === post.nestId);
+      const color = nest ? getNestColor(nest) : { bg: '#eee', txt: '#333' };
+      const commentsCount = state.comments.filter(comment => comment.postId === post.id).length;
+      const myVote = post.voters?.me || 0;
+
+      return `
+        <div class="post-card" onclick="openPost(${post.id})">
+          <div class="post-meta">
+            ${nest ? `<span class="nest-pill" style="background:${color.bg};color:${color.txt}">${nest.emoji} ${escapeHtml(nest.name)}</span>` : ''}
+            <span class="anon-tag">anonymous</span>
+            <span class="post-time">${timeAgo(post.time)}</span>
+            ${state.isAdmin ? `<button class="btn-danger" style="margin-left:auto;" onclick="event.stopPropagation(); deletePost(${post.id})">Delete</button>` : ''}
+          </div>
+          <div class="post-title">${escapeHtml(post.title)}</div>
+          ${post.body ? `<div class="post-body">${escapeHtml(post.body)}</div>` : ''}
+          <div class="post-footer">
+            <div class="vote-row">
+              <button class="vote-btn ${myVote === 1 ? 'active' : ''}" onclick="event.stopPropagation(); vote(${post.id}, 1)">▲</button>
+              <span class="vote-count">${post.votes}</span>
+              <button class="vote-btn down ${myVote === -1 ? 'active' : ''}" onclick="event.stopPropagation(); vote(${post.id}, -1)">▼</button>
+            </div>
+            <button class="comment-btn" onclick="openPost(${post.id})">💬 ${commentsCount} comment${commentsCount !== 1 ? 's' : ''}</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPostDetail() {
+      const post = state.posts.find(item => item.id === state.selectedPost);
+      if (!post) {
+        state.selectedPost = null;
+        renderFeed();
+        return;
+      }
+
+      const nest = state.nests.find(item => item.id === post.nestId);
+      const color = nest ? getNestColor(nest) : { bg: '#eee', txt: '#333' };
+      const myVote = post.voters?.me || 0;
+      const postComments = state.comments.filter(comment => comment.postId === post.id);
+
+      document.getElementById('feed').innerHTML = `
+        <button class="back-btn" onclick="closePost()">← Back</button>
+        <div class="post-detail-card">
+          <div class="post-meta">
+            ${nest ? `<span class="nest-pill" style="background:${color.bg};color:${color.txt}">${nest.emoji} ${escapeHtml(nest.name)}</span>` : ''}
+            <span class="anon-tag">anonymous</span>
+            <span class="post-time">${timeAgo(post.time)}</span>
+            ${state.isAdmin ? `<button class="btn-danger" style="margin-left:auto;" onclick="deletePost(${post.id}); closePost()">Delete</button>` : ''}
+          </div>
+          <div class="post-title" style="font-size:20px; margin-top:4px;">${escapeHtml(post.title)}</div>
+          <div class="post-detail-body">${escapeHtml(post.body || '')}</div>
+          <div class="vote-row">
+            <button class="vote-btn ${myVote === 1 ? 'active' : ''}" onclick="vote(${post.id}, 1)">▲</button>
+            <span class="vote-count">${post.votes}</span>
+            <button class="vote-btn down ${myVote === -1 ? 'active' : ''}" onclick="vote(${post.id}, -1)">▼</button>
+          </div>
+          <hr class="divider">
+          <div class="comment-box">
+            <input id="commentText" placeholder="Write an anonymous comment..." onkeydown="if (event.key === 'Enter') submitComment(${post.id})">
+            <button class="comment-submit" onclick="submitComment(${post.id})">Comment</button>
+          </div>
+          <div id="comments-list">
+            ${postComments.length === 0 ? '<p style="font-size:14px;color:var(--text2)">No comments yet. Start the conversation!</p>' : postComments.map(comment => `
+              <div class="comment">
+                <div class="comment-author">anonymous</div>
+                <div class="comment-text">${escapeHtml(comment.text)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function goHome() {
+      state.selectedPost = null;
+      state.selectedNest = null;
+      render();
+    }
+
+    function selectNest(id) {
+      state.selectedNest = id;
+      state.selectedPost = null;
+      render();
+    }
+
+    function openPost(id) {
+      state.selectedPost = id;
+      render();
+    }
+
+    function closePost() {
+      state.selectedPost = null;
+      render();
+    }
+
+    function logout() {
+      state.isAdmin = false;
+      document.getElementById('adminBtn').textContent = 'Admin';
+      render();
+    }
+
+    function vote(postId, direction) {
+      const post = state.posts.find(item => item.id === postId);
+      if (!post) return;
+
+      post.voters = post.voters || {};
+      const current = post.voters.me || 0;
+      if (current === direction) {
+        post.votes -= direction;
+        post.voters.me = 0;
+      } else {
+        post.votes += direction - current;
+        post.voters.me = direction;
+      }
+
+      save();
+      render();
+    }
+
+    async function submitComment(postId) {
+      const input = document.getElementById('commentText');
+      const text = sanitizeText(input.value.trim());
+      if (!text) return;
+
+      state.comments.push({
+        id: state.nextCommentId++,
+        postId,
+        text,
+        time: Date.now()
+      });
+
+      input.value = '';
+      await save();
+      renderPostDetail();
+    }
+
+    function showOverlay(html) {
+      modal.innerHTML = html;
+      overlay.classList.add('visible');
+    }
+
+    function closeOverlay() {
+      overlay.classList.remove('visible');
+    }
+
+    function closeModal(event) {
+      if (event.target === overlay) {
+        closeOverlay();
+      }
+    }
+
+    function showAdminUnlock() {
+      if (state.isAdmin) {
+        logout();
+        return;
+      }
+
+      showOverlay(`
+        <h2>Admin Login</h2>
+        <p style="font-size:14px;color:var(--text2);margin-bottom:1rem;">Enter your admin PIN to manage OwlsNet.</p>
+        <label>PIN</label>
+        <div class="pin-row">
+          <input type="password" id="pinInput" maxlength="6" placeholder="••••••" onkeydown="if (event.key === 'Enter') checkPin()">
+        </div>
+        <div id="pinErr" style="font-size:13px;color:#c0392b;margin:6px 0;"></div>
+        <div class="modal-footer">
+          <button class="btn-cancel" onclick="closeOverlay()">Cancel</button>
+          <button class="btn-submit" onclick="checkPin()">Unlock</button>
+        </div>
+      `);
+    }
+
+    async function checkPin() {
+      const value = document.getElementById('pinInput').value;
+      const hashed = await sha256(value);
+      if (hashed === ADMIN_HASH) {
+        state.isAdmin = true;
+        document.getElementById('adminBtn').textContent = 'Admin ✓';
+        closeOverlay();
+        render();
+        return;
+      }
+
+      document.getElementById('pinErr').textContent = 'Wrong PIN. Try again.';
+      document.getElementById('pinInput').value = '';
+    }
+
+    function showCreatePost() {
+      const options = state.nests.map(nest => `
+        <option value="${nest.id}"${nest.id === state.selectedNest ? ' selected' : ''}>
+          ${nest.emoji} ${escapeHtml(nest.name)}
+        </option>
+      `).join('');
+
+      showOverlay(`
+        <h2>New Post</h2>
+        <label>Nest</label>
+        <select id="pNest">${options}</select>
+        <label>Title</label>
+        <input id="pTitle" placeholder="Post title...">
+        <label>Body (optional)</label>
+        <textarea id="pBody" placeholder="More details..."></textarea>
+        <p style="font-size:12px;color:var(--text2);margin-top:-8px;">Posts are always anonymous.</p>
+        <div class="modal-footer">
+          <button class="btn-cancel" onclick="closeOverlay()">Cancel</button>
+          <button class="btn-submit" onclick="submitPost()">Post</button>
+        </div>
+      `);
+    }
+
+    async function submitPost() {
+      const nestId = document.getElementById('pNest').value;
+      const title = sanitizeText(document.getElementById('pTitle').value.trim());
+      const body = sanitizeText(document.getElementById('pBody').value.trim());
+
+      if (!title || !nestId) {
+        alert('Please add a title and choose a nest.');
+        return;
+      }
+
+      state.posts.push({
+        id: state.nextPostId++,
+        nestId,
+        title,
+        body,
+        votes: 0,
+        voters: {},
+        time: Date.now()
+      });
+
+      await save();
+      closeOverlay();
+      render();
+    }
+
+    function showCreateNest() {
+      if (!state.isAdmin) return;
+
+      const emojis = ['📣','🏆','📚','🎉','🎨','🎵','💡','🌱','⚽','🖥️','🎭','🌍','🌀','💬','🔥'];
+      const emojiOptions = emojis.map(emoji => `<option value="${emoji}">${emoji}</option>`).join('');
+      const colorOptions = NEST_COLORS.map((_, index) => `<option value="${index}">Color ${index + 1}</option>`).join('');
+
+      showOverlay(`
+        <h2>Create a Nest</h2>
+        <label>Nest Name</label>
+        <input id="nName" placeholder="e.g. Math Club">
+        <label>Description</label>
+        <input id="nDesc" placeholder="What's this nest about?">
+        <label>Emoji</label>
+        <select id="nEmoji">${emojiOptions}</select>
+        <label>Color</label>
+        <select id="nColor">${colorOptions}</select>
+        <div class="modal-footer">
+          <button class="btn-cancel" onclick="closeOverlay()">Cancel</button>
+          <button class="btn-submit" onclick="submitNest()">Create Nest</button>
+        </div>
+      `);
+    }
+
+    async function submitNest() {
+      const name = document.getElementById('nName').value.trim();
+      const desc = document.getElementById('nDesc').value.trim();
+      const emoji = document.getElementById('nEmoji').value;
+      const color = Number(document.getElementById('nColor').value);
+
+      if (!name) {
+        alert('Please enter a name.');
+        return;
+      }
+
+      state.nests.push({
+        id: `nest_${Date.now()}`,
+        name,
+        desc,
+        emoji,
+        color
+      });
+
+      await save();
+      closeOverlay();
+      render();
+    }
+
+    async function deletePost(id) {
+      if (!state.isAdmin) return;
+
+      state.posts = state.posts.filter(post => post.id !== id);
+      state.comments = state.comments.filter(comment => comment.postId !== id);
+      await save();
+      state.selectedPost = state.selectedPost === id ? null : state.selectedPost;
+      render();
+    }
+
+    load();
+  </script>
+</body>
+</html>
