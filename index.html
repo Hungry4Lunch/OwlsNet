@@ -525,6 +525,7 @@
       }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/umd/supabase.min.js"></script>
 </head>
 <body>
   <div class="app">
@@ -554,8 +555,24 @@
 
   <script>
     const STORAGE_KEY = 'owlsnet_state';
+    const VOTE_STORAGE_KEY = 'owlsnet_votes';
+    const TERMS_VERSION = 'v2';
+    const TERMS_STORAGE_KEY = 'owlsnet_terms_version';
+    const LEGACY_TERMS_STORAGE_KEY = 'owlsnet_terms_accepted';
+    const POST_COOLDOWN_KEY = 'owlsnet_last_post_time';
+    const COMMENT_COOLDOWN_KEY = 'owlsnet_last_comment_time';
+    const POST_COOLDOWN_MS = 60000;
+    const COMMENT_COOLDOWN_MS = 30000;
+    const COMMENT_MAX_CHARS = 500;
     const STATE_SECRET = 'OwlsNetSecure2026';
     const STATE_SALT = 'owlsnet-storage-salt';
+    const SUPABASE_URL = 'https://fssabjcdysrmndozzvni.supabase.co';
+    const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Stl4Aee9-h6ChyylmvNdaA_Ppj2quaH'; // preferred new key
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzc2FiamNkeXNybW5kb3p6dm5pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwMzMwMzAsImV4cCI6MjA5NDYwOTAzMH0.MnfcFuLNG2Z8cxtbBJ0Czpuqv0fgDnNsQToNunM16gM'; // optional legacy fallback
+    const USE_PUB_KEY = SUPABASE_PUBLISHABLE_KEY && !SUPABASE_PUBLISHABLE_KEY.includes('<');
+    const useSupabase = SUPABASE_URL && (USE_PUB_KEY || (SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes('<')));
+    const SUPABASE_CLIENT_KEY = USE_PUB_KEY ? SUPABASE_PUBLISHABLE_KEY : SUPABASE_ANON_KEY;
+    const supabaseClient = useSupabase ? supabase.createClient(SUPABASE_URL, SUPABASE_CLIENT_KEY) : null;
     const ADMIN_HASH = '9c0b9a83552942c0309f561bdf5f94bf24b2bae0b452eb4dd9bc5b0fd7ea9e61';
 
     const NEST_COLORS = [
@@ -577,10 +594,121 @@
       { id: 'nest_5', name: 'Unrelated', desc: 'Anything and everything', color: 4, emoji: '🌀' }
     ];
 
+    const REPORT_CATEGORIES = [
+      { value: 'bullying', label: 'Bullying or harassment' },
+      { value: 'cheating', label: 'Academic dishonesty' },
+      { value: 'spam', label: 'Spam or repetitive posts' },
+      { value: 'explicit', label: 'Explicit or adult content' },
+      { value: 'safety', label: 'Threat, harm, or safety concern' },
+      { value: 'privacy', label: 'Personal information' },
+      { value: 'other', label: 'Other' }
+    ];
+
     const storageApi = window.storage ?? {
       async get(key) { return { value: localStorage.getItem(key) }; },
       async set(key, value) { localStorage.setItem(key, value); }
     };
+
+      async function fetchRemoteState() {
+        if (!useSupabase) return;
+        try {
+          const { data: nests } = await supabaseClient.from('nests').select('*').order('id', { ascending: true });
+          const { data: posts } = await supabaseClient.from('posts').select('*').order('created_at', { ascending: false });
+          const { data: comments } = await supabaseClient.from('comments').select('*').order('created_at', { ascending: true });
+              const { data: reports } = await supabaseClient.from('reports').select('*').order('created_at', { ascending: false });
+
+          state.nests = (nests || []).map(n => ({ id: n.id, name: n.name, desc: n.desc, emoji: n.emoji, color: n.color }));
+          const savedVotes = getSavedVotes();
+          state.posts = (posts || []).map(p => ({ id: p.id, nestId: p.nest_id, title: p.title, body: p.body || '', votes: p.votes || 0, voters: { me: savedVotes[String(p.id)] || 0 }, time: new Date(p.created_at).getTime(), hidden: !!p.hidden, status: p.status || 'visible' }));
+          state.comments = (comments || []).map(c => ({ id: c.id, postId: c.post_id, text: c.text, time: new Date(c.created_at).getTime() }));
+          state.reports = (reports || []).map(r => ({ id: r.id, postId: r.post_id, category: r.category || 'other', reason: r.reason || '', status: r.status || 'new', time: new Date(r.created_at).getTime() }));
+        } catch (err) {
+          console.warn('Supabase fetch failed', err);
+        }
+      }
+
+      async function createPostRemote(post) {
+        if (!useSupabase) return;
+        const { error } = await supabaseClient.from('posts').insert([{ nest_id: post.nestId, title: post.title, body: post.body, hidden: false, status: 'visible' }]);
+        if (error && isMissingColumnError(error)) {
+          const fallback = await supabaseClient.from('posts').insert([{ nest_id: post.nestId, title: post.title, body: post.body }]);
+          if (fallback.error) throw fallback.error;
+          await fetchRemoteState();
+          return;
+        }
+        if (error) throw error;
+        await fetchRemoteState();
+      }
+
+      async function createCommentRemote(comment) {
+        if (!useSupabase) return;
+        const { error } = await supabaseClient.from('comments').insert([{ post_id: comment.postId, text: comment.text }]);
+        if (error) throw error;
+        await fetchRemoteState();
+      }
+
+      async function createReportRemote(report) {
+        if (!useSupabase) return;
+        const { error } = await supabaseClient.from('reports').insert([{ id: report.id, post_id: String(report.postId), category: report.category || 'other', reason: report.reason, status: report.status || 'new' }]);
+        if (error && isMissingColumnError(error)) {
+          const fallback = await supabaseClient.from('reports').insert([{ id: report.id, post_id: String(report.postId), reason: report.reason, status: report.status || 'new' }]);
+          if (fallback.error) throw fallback.error;
+          await fetchRemoteState();
+          return;
+        }
+        if (error) throw error;
+        await fetchRemoteState();
+      }
+
+      async function updateReportRemote(reportId, changes) {
+        if (!useSupabase) return;
+        const { error } = await supabaseClient.from('reports').update(changes).eq('id', reportId);
+        if (error) throw error;
+        await fetchRemoteState();
+      }
+
+      async function deleteReportRemote(reportId) {
+        if (!useSupabase) return;
+        const { error } = await supabaseClient.from('reports').delete().eq('id', reportId);
+        if (error) throw error;
+        await fetchRemoteState();
+      }
+
+      async function createNestRemote(nest) {
+        if (!useSupabase) return;
+        const { error } = await supabaseClient.from('nests').insert([{ id: nest.id, name: nest.name, desc: nest.desc, emoji: nest.emoji, color: nest.color }]);
+        if (error) throw error;
+        await fetchRemoteState();
+      }
+
+      async function deletePostRemote(id) {
+        if (!useSupabase) return;
+        const { error } = await supabaseClient.from('posts').delete().eq('id', id);
+        if (error) throw error;
+        await fetchRemoteState();
+      }
+
+      async function hidePostRemote(id) {
+        if (!useSupabase) return;
+        const { error } = await supabaseClient.from('posts').update({ hidden: true, status: 'hidden' }).eq('id', id);
+        if (error) throw error;
+        await fetchRemoteState();
+      }
+
+      async function voteRemote(postId, delta) {
+        if (!useSupabase) return;
+        try {
+          const { error } = await supabaseClient.rpc('vote_post', {
+            post_id: postId,
+            delta
+          });
+          if (error) throw error;
+          await fetchRemoteState();
+        } catch (err) {
+          console.warn('Vote failed', err);
+          throw err;
+        }
+      }
 
     async function deriveKey(secret, salt) {
       const encoder = new TextEncoder();
@@ -648,9 +776,80 @@
         .replace(/'/g, '&#39;');
     }
 
+    function jsArg(value) {
+      return escapeHtml(JSON.stringify(value));
+    }
+
+    function sameId(a, b) {
+      return String(a) === String(b);
+    }
+
+    function getSavedVotes() {
+      try {
+        return JSON.parse(localStorage.getItem(VOTE_STORAGE_KEY) || '{}');
+      } catch {
+        return {};
+      }
+    }
+
+    function setSavedVote(postId, value) {
+      const votes = getSavedVotes();
+      const key = String(postId);
+      if (value) {
+        votes[key] = value;
+      } else {
+        delete votes[key];
+      }
+      localStorage.setItem(VOTE_STORAGE_KEY, JSON.stringify(votes));
+    }
+
+    function isMissingColumnError(error) {
+      return error?.code === '42703' || /column .* does not exist/i.test(error?.message || '');
+    }
+
+    function getReportCategory(value) {
+      return REPORT_CATEGORIES.find(category => category.value === value) || REPORT_CATEGORIES[REPORT_CATEGORIES.length - 1];
+    }
+
+    function getCooldownRemaining(key, duration) {
+      const last = Number(localStorage.getItem(key) || 0);
+      return Math.max(0, duration - (Date.now() - last));
+    }
+
+    function setCooldown(key) {
+      localStorage.setItem(key, String(Date.now()));
+    }
+
+    function formatCooldown(ms) {
+      return `${Math.ceil(ms / 1000)}s`;
+    }
+
     async function sha256(text) {
       const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
       return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function currentUserIsAdmin() {
+      if (!useSupabase) return false;
+      const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+      if (userError || !user) return false;
+
+      const { data, error } = await supabaseClient
+        .from('admin_users')
+        .select('user_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      return !error && !!data;
+    }
+
+    async function refreshAdminState() {
+      state.isAdmin = await currentUserIsAdmin();
+      const adminBtn = document.getElementById('adminBtn');
+      if (adminBtn) {
+        adminBtn.textContent = state.isAdmin ? 'Admin ✓' : 'Admin';
+      }
+      return state.isAdmin;
     }
 
     const state = {
@@ -660,8 +859,10 @@
       nests: [],
       posts: [],
       comments: [],
+      reports: [],
       nextPostId: 1,
-      nextCommentId: 1
+      nextCommentId: 1,
+      reportFilter: 'new'
     };
 
     const overlay = document.getElementById('overlay');
@@ -671,6 +872,22 @@
     modal.addEventListener('click', event => event.stopPropagation());
 
     async function load() {
+      if (useSupabase) {
+        await refreshAdminState();
+        await fetchRemoteState();
+        // ensure default nests exist remotely
+        if (!state.nests || state.nests.length === 0) {
+          // create default nests remotely (ignore errors if they already exist)
+          for (const n of INITIAL_NESTS) {
+            try { await createNestRemote(n); } catch (e) { /* ignore */ }
+          }
+          await fetchRemoteState();
+        }
+        render();
+        showTermsIfNeeded();
+        return;
+      }
+
       try {
         const response = await storageApi.get(STORAGE_KEY);
         const rawValue = typeof response === 'string' ? response : response?.value;
@@ -704,14 +921,18 @@
       }
 
       render();
+      showTermsIfNeeded();
     }
 
     async function save() {
+      // When using Supabase we persist per-table on each action; local save kept for fallback only.
+      if (useSupabase) return;
       try {
         const payload = JSON.stringify({
           nests: state.nests,
           posts: state.posts,
           comments: state.comments,
+          reports: state.reports,
           nextPostId: state.nextPostId,
           nextCommentId: state.nextCommentId
         });
@@ -722,6 +943,10 @@
       }
     }
 
+    function visiblePosts() {
+      return state.posts.filter(post => !post.hidden && post.status !== 'hidden');
+    }
+
     function getNestColor(nest) {
       return NEST_COLORS[nest.color % NEST_COLORS.length];
     }
@@ -729,16 +954,22 @@
     const BAD_WORDS = [
       'fuck',
       'shit',
-      'damn',
       'bitch',
       'asshole',
       'bastard',
-      'crap',
       'hell',
-      'darn',
       'idiot',
       'stupid',
-      'nigger'
+      'nigger',
+      'dick',
+      'porn',
+      'suicide',
+      'kill yourself',
+      'kys',
+      'test answers',
+      'exam answers',
+      'cheat',
+      'plagiarize'
     ];
 
     function censorWord(match) {
@@ -747,7 +978,8 @@
 
     function sanitizeText(text) {
       if (!text) return '';
-      const pattern = new RegExp(`\\b(${BAD_WORDS.join('|')})\\b`, 'gi');
+      const escapedWords = BAD_WORDS.map(word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      const pattern = new RegExp(`\\b(${escapedWords.join('|')})\\b`, 'gi');
       return text.replace(pattern, censorWord);
     }
 
@@ -759,6 +991,224 @@
       return `${Math.floor(seconds / 86400)}d ago`;
     }
 
+    function countWords(s) {
+      if (!s) return 0;
+      const trimmed = String(s).trim();
+      if (trimmed === '') return 0;
+      return trimmed.split(/\s+/).length;
+    }
+
+    function updatePostWordCount() {
+      const title = document.getElementById('pTitle');
+      const body = document.getElementById('pBody');
+      const el = document.getElementById('wordCount');
+      if (!el) return;
+      const words = (title ? countWords(title.value) : 0) + (body ? countWords(body.value) : 0);
+      el.textContent = `${words} / 100 words`;
+      el.style.color = words > 100 ? '#c0392b' : 'var(--text2)';
+    }
+
+    function updateCommentCount() {
+      const input = document.getElementById('commentText');
+      const el = document.getElementById('commentCount');
+      if (!input || !el) return;
+      el.textContent = `${input.value.length} / ${COMMENT_MAX_CHARS}`;
+      el.style.color = input.value.length > COMMENT_MAX_CHARS ? '#c0392b' : 'var(--text2)';
+    }
+
+    async function reportPost(postId) {
+      const post = state.posts.find(p => sameId(p.id, postId));
+      const options = REPORT_CATEGORIES.map(category => `<option value="${category.value}">${escapeHtml(category.label)}</option>`).join('');
+      showOverlay(`
+        <h2>Report Post</h2>
+        <p style="font-size:14px;color:var(--text2);margin-bottom:1rem;">Choose the closest reason and add details if helpful.</p>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:8px;"><strong>Post:</strong> ${post ? escapeHtml(post.title) : 'Unknown'}</div>
+        <label>Reason</label>
+        <select id="reportCategory" onchange="updateReportSafetyNote()">${options}</select>
+        <div id="reportSafetyNote" style="display:none;font-size:13px;color:#8a4b00;background:#fff3cd;border:1px solid #f0d98c;border-radius:10px;padding:10px;margin:0 0 12px;">
+          If this involves immediate danger, contact a trusted adult, school administrator, or emergency services now. Do not wait for a report to be reviewed.
+        </div>
+        <label>Reason (optional)</label>
+        <textarea id="reportReason" placeholder="Why are you reporting this? (harassment, spam, etc.)"></textarea>
+        <div class="modal-footer">
+          <button class="btn-cancel" onclick="closeOverlay()">Cancel</button>
+          <button class="btn-submit" onclick="confirmReport(${jsArg(postId)})">Submit Report</button>
+        </div>
+      `);
+    }
+
+    function updateReportSafetyNote() {
+      const category = document.getElementById('reportCategory')?.value;
+      const note = document.getElementById('reportSafetyNote');
+      if (note) note.style.display = category === 'safety' ? 'block' : 'none';
+    }
+
+    async function confirmReport(postId) {
+      const category = document.getElementById('reportCategory')?.value || 'other';
+      const reason = document.getElementById('reportReason')?.value.trim() || '';
+      const report = { id: `r_${Date.now()}`, postId, category, reason, time: Date.now(), status: 'new' };
+      if (useSupabase) {
+        try {
+          await createReportRemote(report);
+          closeOverlay();
+          alert(category === 'safety' ? 'Report submitted. If there is immediate danger, contact a trusted adult or emergency services now.' : 'Report submitted. Thank you.');
+          return;
+        } catch (err) {
+          console.warn('Remote report failed', err);
+          alert('Unable to submit report. Falling back to local save.');
+        }
+      }
+
+      state.reports.push(report);
+      await save();
+      closeOverlay();
+      alert(category === 'safety' ? 'Report submitted. If there is immediate danger, contact a trusted adult or emergency services now.' : 'Report submitted. Thank you.');
+    }
+
+    function showAdminReports() {
+      const filter = state.reportFilter || 'new';
+      const filters = [
+        { value: 'new', label: 'New' },
+        { value: 'safety', label: 'Safety' },
+        { value: 'resolved', label: 'Resolved' },
+        { value: 'all', label: 'All' }
+      ].map(item => `<button class="${filter === item.value ? 'btn-submit' : 'btn-cancel'}" onclick="setReportFilter(${jsArg(item.value)})">${item.label}</button>`).join('');
+      const filteredReports = state.reports.filter(report => {
+        if (filter === 'all') return true;
+        if (filter === 'safety') return report.category === 'safety';
+        return report.status === filter;
+      });
+      const rows = filteredReports.length === 0 ? '<p style="font-size:14px;color:var(--text2)">No reports in this view.</p>' : filteredReports.map(r => {
+        const post = state.posts.find(p => sameId(p.id, r.postId)) || { title: 'Deleted post' };
+        const category = getReportCategory(r.category);
+        const reason = r.reason ? escapeHtml(r.reason) : '<i>No reason provided</i>';
+        return `
+          <div style="margin-bottom:12px;padding:10px;border:1px solid var(--border);border-radius:12px;">
+            <div style="font-weight:600;color:var(--brand);">${escapeHtml(post.title)}</div>
+            <div style="font-size:13px;color:var(--text);margin:6px 0;">${escapeHtml(post.body || 'No body text.')}</div>
+            <div style="font-size:12px;color:var(--text2);margin:6px 0;"><strong>Category:</strong> ${escapeHtml(category.label)}</div>
+            <div style="font-size:13px;color:var(--text2);margin:6px 0;">${reason}</div>
+            <div style="font-size:12px;color:var(--text2);">${timeAgo(r.time)} • status: ${escapeHtml(r.status)}</div>
+            <div style="margin-top:8px;display:flex;gap:8px;">
+              <button class="btn-cancel" onclick="viewReportPost(${jsArg(r.id)})">View Post</button>
+              <button class="btn-submit" onclick="resolveReport(${jsArg(r.id)})">Mark Resolved</button>
+              <button class="btn-danger" onclick="deleteReport(${jsArg(r.id)})">Delete Report</button>
+              <button class="btn-cancel" onclick="hidePostAdmin(${jsArg(r.postId)})">Hide Post</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      showOverlay(`
+        <h2>Reports</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${filters}</div>
+        <div style="max-height:420px;overflow:auto;padding-top:8px;">${rows}</div>
+        <div class="modal-footer">
+          <button class="btn-cancel" onclick="closeOverlay()">Close</button>
+        </div>
+      `);
+    }
+
+    function setReportFilter(filter) {
+      state.reportFilter = filter;
+      showAdminReports();
+    }
+
+    function viewReportPost(reportId) {
+      const r = state.reports.find(x => x.id === reportId);
+      if (!r) return;
+      state.selectedPost = r.postId;
+      closeOverlay();
+      render();
+    }
+
+    async function resolveReport(reportId) {
+      const r = state.reports.find(x => x.id === reportId);
+      if (!r) return;
+      r.status = 'resolved';
+      if (useSupabase) {
+        try {
+          await updateReportRemote(reportId, { status: 'resolved' });
+          showAdminReports();
+          return;
+        } catch (err) {
+          console.warn('Remote resolve failed', err);
+        }
+      }
+      await save();
+      showAdminReports();
+    }
+
+    async function deleteReport(reportId) {
+      if (useSupabase) {
+        try {
+          await deleteReportRemote(reportId);
+          showAdminReports();
+          return;
+        } catch (err) {
+          console.warn('Remote delete report failed', err);
+          alert('Unable to delete report remotely. Falling back to local removal.');
+        }
+      }
+      state.reports = state.reports.filter(x => x.id !== reportId);
+      await save();
+      showAdminReports();
+    }
+
+    async function deletePostAdmin(postId) {
+      if (!confirm('Delete this post and all associated reports/comments?')) return;
+      if (useSupabase) {
+        try {
+          // Remove related rows first in case the database does not have cascade deletes.
+          await supabaseClient.from('comments').delete().eq('post_id', postId);
+          await supabaseClient.from('reports').delete().eq('post_id', String(postId));
+          await deletePostRemote(postId);
+          await fetchRemoteState();
+          showAdminReports();
+          render();
+          return;
+        } catch (err) {
+          console.warn('Remote delete post failed', err);
+          alert('Unable to delete post remotely. Falling back to local deletion.');
+        }
+      }
+
+      state.posts = state.posts.filter(p => !sameId(p.id, postId));
+      state.comments = state.comments.filter(c => !sameId(c.postId, postId));
+      state.reports = state.reports.filter(r => !sameId(r.postId, postId));
+      await save();
+      showAdminReports();
+      render();
+    }
+
+    async function hidePostAdmin(postId) {
+      if (!confirm('Hide this post from the public feed? Reports and comments will be kept for review.')) return;
+      if (useSupabase) {
+        try {
+          await hidePostRemote(postId);
+          state.selectedPost = sameId(state.selectedPost, postId) ? null : state.selectedPost;
+          showAdminReports();
+          render();
+          return;
+        } catch (err) {
+          console.warn('Remote hide failed', err);
+          if (!confirm('Your database may not have hidden/status columns yet. Delete the post instead?')) return;
+          await deletePostAdmin(postId);
+          return;
+        }
+      }
+
+      const post = state.posts.find(p => sameId(p.id, postId));
+      if (post) {
+        post.hidden = true;
+        post.status = 'hidden';
+      }
+      state.selectedPost = sameId(state.selectedPost, postId) ? null : state.selectedPost;
+      await save();
+      showAdminReports();
+      render();
+    }
+
     function render() {
       renderSidebar();
       state.selectedPost ? renderPostDetail() : renderFeed();
@@ -766,14 +1216,15 @@
 
     function renderSidebar() {
       const selectedNest = state.selectedNest;
-      const allCount = state.posts.length;
+      const posts = visiblePosts();
+      const allCount = posts.length;
       const items = state.nests.map(nest => {
-        const count = state.posts.filter(post => post.nestId === nest.id).length;
+        const count = posts.filter(post => sameId(post.nestId, nest.id)).length;
         const color = getNestColor(nest);
-        const active = selectedNest === nest.id ? 'active' : '';
+        const active = sameId(selectedNest, nest.id) ? 'active' : '';
 
         return `
-          <div class="nest-item ${active}" onclick="selectNest('${nest.id}')">
+          <div class="nest-item ${active}" onclick="selectNest(${jsArg(nest.id)})">
             <div class="nest-dot" style="background:${color.bg};color:${color.txt}">${nest.emoji}</div>
             <div>
               <div class="nest-name">${escapeHtml(nest.name)}</div>
@@ -813,6 +1264,13 @@
             <h3 style="color: var(--accent);">Admin mode active</h3>
             <p>Manage nests, posts, and delete content.</p>
             <button class="btn-cancel" style="width: 100%;" onclick="logout()">Log out</button>
+            <div style="height:8px"></div>
+            <button class="btn-post" style="width:100%; justify-content:center;" onclick="showReorderNests()">↕ Reorder Nests</button>
+          </div>
+          <div class="card sidebar-card" style="border-color: var(--accent);">
+            <h3 style="color: var(--accent);">Reports</h3>
+            <p>View reports submitted by users.</p>
+            <button class="btn-post" style="width:100%; justify-content:center;" onclick="showAdminReports()">View Reports</button>
           </div>
         ` : ''}
       `;
@@ -820,12 +1278,13 @@
 
     function renderFeed() {
       const feed = document.getElementById('feed');
+      const posts = visiblePosts();
       const filteredPosts = state.selectedNest
-        ? state.posts.filter(post => post.nestId === state.selectedNest)
-        : state.posts;
+        ? posts.filter(post => sameId(post.nestId, state.selectedNest))
+        : posts;
 
       const sortedPosts = [...filteredPosts].sort((a, b) => b.votes - a.votes);
-      const nest = state.nests.find(nest => nest.id === state.selectedNest);
+      const nest = state.nests.find(nest => sameId(nest.id, state.selectedNest));
       const title = nest ? `${nest.emoji} ${escapeHtml(nest.name)}` : '🦉 All Posts';
 
       feed.innerHTML = `
@@ -843,45 +1302,48 @@
     }
 
     function renderPostCard(post) {
-      const nest = state.nests.find(item => item.id === post.nestId);
+      const nest = state.nests.find(item => sameId(item.id, post.nestId));
       const color = nest ? getNestColor(nest) : { bg: '#eee', txt: '#333' };
-      const commentsCount = state.comments.filter(comment => comment.postId === post.id).length;
+      const commentsCount = state.comments.filter(comment => sameId(comment.postId, post.id)).length;
       const myVote = post.voters?.me || 0;
+      const postIdArg = jsArg(post.id);
 
       return `
-        <div class="post-card" onclick="openPost(${post.id})">
+        <div class="post-card" onclick="openPost(${postIdArg})">
           <div class="post-meta">
             ${nest ? `<span class="nest-pill" style="background:${color.bg};color:${color.txt}">${nest.emoji} ${escapeHtml(nest.name)}</span>` : ''}
             <span class="anon-tag">anonymous</span>
             <span class="post-time">${timeAgo(post.time)}</span>
-            ${state.isAdmin ? `<button class="btn-danger" style="margin-left:auto;" onclick="event.stopPropagation(); deletePost(${post.id})">Delete</button>` : ''}
+            ${state.isAdmin ? `<button class="btn-danger" style="margin-left:auto;" onclick="event.stopPropagation(); hidePostAdmin(${postIdArg})">Hide</button>` : ''}
           </div>
           <div class="post-title">${escapeHtml(post.title)}</div>
           ${post.body ? `<div class="post-body">${escapeHtml(post.body)}</div>` : ''}
           <div class="post-footer">
             <div class="vote-row">
-              <button class="vote-btn ${myVote === 1 ? 'active' : ''}" onclick="event.stopPropagation(); vote(${post.id}, 1)">▲</button>
+              <button class="vote-btn ${myVote === 1 ? 'active' : ''}" onclick="event.stopPropagation(); vote(${postIdArg}, 1)">▲</button>
               <span class="vote-count">${post.votes}</span>
-              <button class="vote-btn down ${myVote === -1 ? 'active' : ''}" onclick="event.stopPropagation(); vote(${post.id}, -1)">▼</button>
+              <button class="vote-btn down ${myVote === -1 ? 'active' : ''}" onclick="event.stopPropagation(); vote(${postIdArg}, -1)">▼</button>
             </div>
-            <button class="comment-btn" onclick="openPost(${post.id})">💬 ${commentsCount} comment${commentsCount !== 1 ? 's' : ''}</button>
+            <button class="comment-btn" onclick="openPost(${postIdArg})">💬 ${commentsCount} comment${commentsCount !== 1 ? 's' : ''}</button>
+            <button class="btn-cancel" onclick="event.stopPropagation(); reportPost(${postIdArg})">⚑ Report</button>
           </div>
         </div>
       `;
     }
 
     function renderPostDetail() {
-      const post = state.posts.find(item => item.id === state.selectedPost);
+      const post = state.posts.find(item => sameId(item.id, state.selectedPost));
       if (!post) {
         state.selectedPost = null;
         renderFeed();
         return;
       }
 
-      const nest = state.nests.find(item => item.id === post.nestId);
+      const nest = state.nests.find(item => sameId(item.id, post.nestId));
       const color = nest ? getNestColor(nest) : { bg: '#eee', txt: '#333' };
       const myVote = post.voters?.me || 0;
-      const postComments = state.comments.filter(comment => comment.postId === post.id);
+      const postComments = state.comments.filter(comment => sameId(comment.postId, post.id));
+      const postIdArg = jsArg(post.id);
 
       document.getElementById('feed').innerHTML = `
         <button class="back-btn" onclick="closePost()">← Back</button>
@@ -890,19 +1352,21 @@
             ${nest ? `<span class="nest-pill" style="background:${color.bg};color:${color.txt}">${nest.emoji} ${escapeHtml(nest.name)}</span>` : ''}
             <span class="anon-tag">anonymous</span>
             <span class="post-time">${timeAgo(post.time)}</span>
-            ${state.isAdmin ? `<button class="btn-danger" style="margin-left:auto;" onclick="deletePost(${post.id}); closePost()">Delete</button>` : ''}
+            ${state.isAdmin ? `<button class="btn-danger" style="margin-left:auto;" onclick="hidePostAdmin(${postIdArg})">Hide</button>` : ''}
           </div>
           <div class="post-title" style="font-size:20px; margin-top:4px;">${escapeHtml(post.title)}</div>
           <div class="post-detail-body">${escapeHtml(post.body || '')}</div>
           <div class="vote-row">
-            <button class="vote-btn ${myVote === 1 ? 'active' : ''}" onclick="vote(${post.id}, 1)">▲</button>
+            <button class="vote-btn ${myVote === 1 ? 'active' : ''}" onclick="vote(${postIdArg}, 1)">▲</button>
             <span class="vote-count">${post.votes}</span>
-            <button class="vote-btn down ${myVote === -1 ? 'active' : ''}" onclick="vote(${post.id}, -1)">▼</button>
+            <button class="vote-btn down ${myVote === -1 ? 'active' : ''}" onclick="vote(${postIdArg}, -1)">▼</button>
           </div>
+          <div style="margin-top:10px;"><button class="btn-cancel" onclick="reportPost(${postIdArg})">⚑ Report</button></div>
           <hr class="divider">
           <div class="comment-box">
-            <input id="commentText" placeholder="Write an anonymous comment..." onkeydown="if (event.key === 'Enter') submitComment(${post.id})">
-            <button class="comment-submit" onclick="submitComment(${post.id})">Comment</button>
+            <input id="commentText" maxlength="${COMMENT_MAX_CHARS}" placeholder="Write an anonymous comment..." oninput="updateCommentCount()" onkeydown="if (event.key === 'Enter') submitComment(${postIdArg})">
+            <div id="commentCount" style="font-size:12px;color:var(--text2);margin-top:6px;">0 / ${COMMENT_MAX_CHARS}</div>
+            <button class="comment-submit" onclick="submitComment(${postIdArg})">Comment</button>
           </div>
           <div id="comments-list">
             ${postComments.length === 0 ? '<p style="font-size:14px;color:var(--text2)">No comments yet. Start the conversation!</p>' : postComments.map(comment => `
@@ -938,25 +1402,44 @@
       render();
     }
 
-    function logout() {
+    async function logout() {
+      if (useSupabase) {
+        await supabaseClient.auth.signOut();
+      }
       state.isAdmin = false;
       document.getElementById('adminBtn').textContent = 'Admin';
+      if (useSupabase) {
+        await fetchRemoteState();
+      }
       render();
     }
 
     function vote(postId, direction) {
-      const post = state.posts.find(item => item.id === postId);
+      const post = state.posts.find(item => sameId(item.id, postId));
       if (!post) return;
 
       post.voters = post.voters || {};
       const current = post.voters.me || 0;
-      if (current === direction) {
-        post.votes -= direction;
-        post.voters.me = 0;
-      } else {
-        post.votes += direction - current;
-        post.voters.me = direction;
+      const nextVote = current === direction ? 0 : direction;
+      const delta = nextVote - current;
+
+      if (useSupabase) {
+        post.votes += delta;
+        post.voters.me = nextVote;
+        setSavedVote(postId, nextVote);
+        render();
+        voteRemote(postId, delta).then(() => render()).catch(err => {
+          console.warn(err);
+          post.votes -= delta;
+          post.voters.me = current;
+          setSavedVote(postId, current);
+          render();
+        });
+        return;
       }
+
+      post.votes += delta;
+      post.voters.me = nextVote;
 
       save();
       render();
@@ -966,6 +1449,28 @@
       const input = document.getElementById('commentText');
       const text = sanitizeText(input.value.trim());
       if (!text) return;
+      if (text.length > COMMENT_MAX_CHARS) {
+        alert(`Comments are limited to ${COMMENT_MAX_CHARS} characters.`);
+        return;
+      }
+
+      const remaining = getCooldownRemaining(COMMENT_COOLDOWN_KEY, COMMENT_COOLDOWN_MS);
+      if (remaining > 0) {
+        alert(`Please wait ${formatCooldown(remaining)} before commenting again.`);
+        return;
+      }
+
+      if (useSupabase) {
+        try {
+          await createCommentRemote({ postId, text });
+          setCooldown(COMMENT_COOLDOWN_KEY);
+          input.value = '';
+          renderPostDetail();
+        } catch (err) {
+          console.warn('Comment save failed', err);
+        }
+        return;
+      }
 
       state.comments.push({
         id: state.nextCommentId++,
@@ -975,17 +1480,57 @@
       });
 
       input.value = '';
+      setCooldown(COMMENT_COOLDOWN_KEY);
       await save();
       renderPostDetail();
     }
 
-    function showOverlay(html) {
+    function hasAcceptedTerms() {
+      return localStorage.getItem(TERMS_STORAGE_KEY) === TERMS_VERSION || localStorage.getItem(LEGACY_TERMS_STORAGE_KEY) === 'yes';
+    }
+
+    function showTermsIfNeeded() {
+      if (hasAcceptedTerms()) return;
+
+      showOverlay(`
+        <h2>Terms & Conditions</h2>
+        <p style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:12px;">
+          You must accept these terms before using Owl Net.
+        </p>
+        <div style="max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--surface2);font-size:13px;color:var(--text);line-height:1.6;">
+          <p style="margin-bottom:10px;"><strong>1. About Owl Net</strong><br>Owl Net is an anonymous forum for students at our school to share thoughts, ask questions, and connect with peers. No account or login is required. Anonymity is a privilege - it comes with responsibility.</p>
+          <p style="margin-bottom:10px;"><strong>2. Who This Forum Is For</strong><br>This forum is intended for students of our school only. By using it, you confirm that you are a current student.</p>
+          <p style="margin-bottom:10px;"><strong>3. Academic Integrity</strong><br>The forum must not be used to share exam answers, test papers, or facilitate cheating, or to coordinate plagiarism or academic dishonesty in any form.</p>
+          <p style="margin-bottom:10px;"><strong>4. Appropriate Content Only</strong><br>Do not post explicit, sexual, or adult content; graphic or violent material; spam or repetitive posts; advertisements; or self-promotion of paid services.</p>
+          <p style="margin-bottom:10px;"><strong>5. Anonymity Has Limits</strong><br>While Owl Net does not collect personal information, posts that involve serious threats, harm, or illegal activity may be reported to school administration or authorities. Anonymity does not protect users from real-world consequences for harmful behavior.</p>
+          <p style="margin-bottom:10px;"><strong>6. Content Removal</strong><br>Posts that violate these terms may be removed at any time without notice by moderators. Repeated or severe violations may result in your device or network being blocked from accessing the forum.</p>
+          <p style="margin-bottom:10px;"><strong>7. No Guarantees</strong><br>Owl Net is provided as-is. We do not guarantee the forum will always be available, and we are not responsible for the views or content posted by users.</p>
+          <p style="margin-bottom:10px;"><strong>8. Changes to These Terms</strong><br>These terms may be updated at any time. Continued use of the forum means you accept the current terms.</p>
+          <p style="margin-bottom:10px;"><strong>9. Reporting</strong><br>If you see something that violates these terms, please use the report button. Do not engage with harmful posts - report them and move on.</p>
+          <p><strong>10. Privacy</strong><br>Owl Net stores submitted posts, comments, reports, timestamps, report categories, and moderation status. Your browser may also store terms acceptance, voting choices, and anti-spam cooldown times.</p>
+        </div>
+        <div class="modal-footer" style="margin-top:14px;">
+          <button class="btn-submit" onclick="acceptTerms()">I Agree</button>
+        </div>
+      `, true);
+    }
+
+    function acceptTerms() {
+      localStorage.setItem(TERMS_STORAGE_KEY, TERMS_VERSION);
+      localStorage.setItem(LEGACY_TERMS_STORAGE_KEY, 'yes');
+      closeOverlay(true);
+    }
+
+    function showOverlay(html, locked = false) {
       modal.innerHTML = html;
+      overlay.dataset.locked = locked ? 'true' : 'false';
       overlay.classList.add('visible');
     }
 
-    function closeOverlay() {
+    function closeOverlay(force = false) {
+      if (overlay.dataset.locked === 'true' && !force) return;
       overlay.classList.remove('visible');
+      overlay.dataset.locked = 'false';
     }
 
     function closeModal(event) {
@@ -997,6 +1542,23 @@
     function showAdminUnlock() {
       if (state.isAdmin) {
         logout();
+        return;
+      }
+
+      if (useSupabase) {
+        showOverlay(`
+          <h2>Admin Login</h2>
+          <p style="font-size:14px;color:var(--text2);margin-bottom:1rem;">Sign in with the admin account you added in Supabase Auth.</p>
+          <label>Email</label>
+          <input id="adminEmail" type="email" placeholder="you@example.com" autocomplete="username">
+          <label>Password</label>
+          <input id="adminPassword" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if (event.key === 'Enter') checkAdminLogin()">
+          <div id="pinErr" style="font-size:13px;color:#c0392b;margin:6px 0;"></div>
+          <div class="modal-footer">
+            <button class="btn-cancel" onclick="closeOverlay()">Cancel</button>
+            <button class="btn-submit" onclick="checkAdminLogin()">Sign In</button>
+          </div>
+        `);
         return;
       }
 
@@ -1013,6 +1575,34 @@
           <button class="btn-submit" onclick="checkPin()">Unlock</button>
         </div>
       `);
+    }
+
+    async function checkAdminLogin() {
+      const email = document.getElementById('adminEmail')?.value.trim();
+      const password = document.getElementById('adminPassword')?.value || '';
+      const errorEl = document.getElementById('pinErr');
+
+      if (!email || !password) {
+        if (errorEl) errorEl.textContent = 'Enter your email and password.';
+        return;
+      }
+
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) {
+        if (errorEl) errorEl.textContent = 'Login failed. Check your email and password.';
+        return;
+      }
+
+      const isAdmin = await refreshAdminState();
+      if (!isAdmin) {
+        await supabaseClient.auth.signOut();
+        if (errorEl) errorEl.textContent = 'This account is not listed as an admin.';
+        return;
+      }
+
+      await fetchRemoteState();
+      closeOverlay();
+      render();
     }
 
     async function checkPin() {
@@ -1032,34 +1622,61 @@
 
     function showCreatePost() {
       const options = state.nests.map(nest => `
-        <option value="${nest.id}"${nest.id === state.selectedNest ? ' selected' : ''}>
+        <option value="${escapeHtml(nest.id)}"${sameId(nest.id, state.selectedNest) ? ' selected' : ''}>
           ${nest.emoji} ${escapeHtml(nest.name)}
         </option>
       `).join('');
-
       showOverlay(`
         <h2>New Post</h2>
         <label>Nest</label>
         <select id="pNest">${options}</select>
         <label>Title</label>
-        <input id="pTitle" placeholder="Post title...">
+        <input id="pTitle" placeholder="Post title..." oninput="updatePostWordCount()">
         <label>Body (optional)</label>
-        <textarea id="pBody" placeholder="More details..."></textarea>
-        <p style="font-size:12px;color:var(--text2);margin-top:-8px;">Posts are always anonymous.</p>
+        <textarea id="pBody" placeholder="More details..." oninput="updatePostWordCount()"></textarea>
+        <p id="wordCount" style="font-size:12px;color:var(--text2);margin:6px 0 4px;">0 / 100 words</p>
+        <p style="font-size:12px;color:var(--text2);margin:0 0 8px;">Posts are always anonymous.</p>
         <div class="modal-footer">
           <button class="btn-cancel" onclick="closeOverlay()">Cancel</button>
           <button class="btn-submit" onclick="submitPost()">Post</button>
         </div>
       `);
+      updatePostWordCount();
     }
 
     async function submitPost() {
       const nestId = document.getElementById('pNest').value;
-      const title = sanitizeText(document.getElementById('pTitle').value.trim());
-      const body = sanitizeText(document.getElementById('pBody').value.trim());
+      const rawTitle = document.getElementById('pTitle').value.trim();
+      const rawBody = document.getElementById('pBody').value.trim();
+      const title = sanitizeText(rawTitle);
+      const body = sanitizeText(rawBody);
+      const remaining = getCooldownRemaining(POST_COOLDOWN_KEY, POST_COOLDOWN_MS);
+      if (remaining > 0) {
+        alert(`Please wait ${formatCooldown(remaining)} before posting again.`);
+        return;
+      }
+
+      const totalWords = countWords(rawTitle) + countWords(rawBody);
+      if (totalWords > 100) {
+        alert(`Post exceeds 100 word limit (${totalWords}). Please shorten your post.`);
+        return;
+      }
 
       if (!title || !nestId) {
         alert('Please add a title and choose a nest.');
+        return;
+      }
+
+      if (useSupabase) {
+        try {
+          await createPostRemote({ nestId, title, body });
+          setCooldown(POST_COOLDOWN_KEY);
+          closeOverlay();
+          render();
+        } catch (err) {
+          console.warn('Remote post failed', err);
+          alert('Unable to create post.');
+        }
         return;
       }
 
@@ -1070,9 +1687,12 @@
         body,
         votes: 0,
         voters: {},
-        time: Date.now()
+        time: Date.now(),
+        hidden: false,
+        status: 'visible'
       });
 
+      setCooldown(POST_COOLDOWN_KEY);
       await save();
       closeOverlay();
       render();
@@ -1102,6 +1722,54 @@
       `);
     }
 
+    function showReorderNests() {
+      if (!state.isAdmin) return;
+      const rows = state.nests.map((n, i) => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:30px;text-align:center;">${i+1}</div>
+            <div style="min-width:140px;font-weight:600;">${escapeHtml(n.name)}</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-cancel" onclick="moveNestUp(${i})" ${i===0? 'disabled' : ''}>↑</button>
+            <button class="btn-cancel" onclick="moveNestDown(${i})" ${i===state.nests.length-1? 'disabled' : ''}>↓</button>
+          </div>
+        </div>
+      `).join('');
+
+      showOverlay(`
+        <h2>Reorder Nests</h2>
+        <div style="max-height:360px;overflow:auto;padding-top:8px;">${rows}</div>
+        <div class="modal-footer">
+          <button class="btn-cancel" onclick="closeOverlay()">Cancel</button>
+          <button class="btn-submit" onclick="saveReorderNests()">Save Order</button>
+        </div>
+      `);
+    }
+
+    function moveNestUp(index) {
+      if (index <= 0) return;
+      const tmp = state.nests[index-1];
+      state.nests[index-1] = state.nests[index];
+      state.nests[index] = tmp;
+      showReorderNests();
+    }
+
+    function moveNestDown(index) {
+      if (index >= state.nests.length - 1) return;
+      const tmp = state.nests[index+1];
+      state.nests[index+1] = state.nests[index];
+      state.nests[index] = tmp;
+      showReorderNests();
+    }
+
+    async function saveReorderNests() {
+      // Persist locally; remote persistence would require adding an order column/server support.
+      await save();
+      closeOverlay();
+      render();
+    }
+
     async function submitNest() {
       const name = document.getElementById('nName').value.trim();
       const desc = document.getElementById('nDesc').value.trim();
@@ -1113,14 +1781,20 @@
         return;
       }
 
-      state.nests.push({
-        id: `nest_${Date.now()}`,
-        name,
-        desc,
-        emoji,
-        color
-      });
+      const newNest = { id: `nest_${Date.now()}`, name, desc, emoji, color };
+      if (useSupabase) {
+        try {
+          await createNestRemote(newNest);
+          closeOverlay();
+          render();
+        } catch (err) {
+          console.warn('Create nest failed', err);
+          alert('Unable to create nest.');
+        }
+        return;
+      }
 
+      state.nests.push(newNest);
       await save();
       closeOverlay();
       render();
@@ -1128,11 +1802,24 @@
 
     async function deletePost(id) {
       if (!state.isAdmin) return;
+      if (useSupabase) {
+        try {
+          await supabaseClient.from('comments').delete().eq('post_id', id);
+          await supabaseClient.from('reports').delete().eq('post_id', String(id));
+          await deletePostRemote(id);
+          state.selectedPost = sameId(state.selectedPost, id) ? null : state.selectedPost;
+          render();
+        } catch (err) {
+          console.warn('Remote delete failed', err);
+        }
+        return;
+      }
 
-      state.posts = state.posts.filter(post => post.id !== id);
-      state.comments = state.comments.filter(comment => comment.postId !== id);
+      state.posts = state.posts.filter(post => !sameId(post.id, id));
+      state.comments = state.comments.filter(comment => !sameId(comment.postId, id));
+      state.reports = state.reports.filter(report => !sameId(report.postId, id));
       await save();
-      state.selectedPost = state.selectedPost === id ? null : state.selectedPost;
+      state.selectedPost = sameId(state.selectedPost, id) ? null : state.selectedPost;
       render();
     }
 
